@@ -6,25 +6,16 @@ from datetime import datetime, timedelta, timezone
 import requests
 
 
-API_KEY = os.environ["API_FOOTBALL_KEY"]
-BASE_URL = "https://v3.football.api-sports.io"
+# ============================================================
+# CONFIG
+# ============================================================
+
+TOKEN = os.environ["FOOTBALL_DATA_TOKEN"]
+
+BASE_URL = "https://api.football-data.org/v4"
 
 HEADERS = {
-    "x-apisports-key": API_KEY
-}
-
-# League IDs
-LEAGUES = {
-    39: "England Premier League",
-    40: "England Championship",
-    61: "France Ligue 1",
-    78: "Germany Bundesliga",
-    94: "Portugal Liga Portugal",
-    119: "Denmark Superliga",
-    135: "Italy Serie A",
-    140: "Spain LaLiga",
-    218: "Austria Bundesliga",
-    288: "South Africa Premiership",
+    "X-Auth-Token": TOKEN
 }
 
 SEASON = 2026
@@ -33,59 +24,96 @@ DATA_DIR = "data"
 LIVE_FILE = os.path.join(DATA_DIR, "live.json")
 HISTORY_FILE = os.path.join(DATA_DIR, "history.json")
 
+# football-data.org competition codes
+LEAGUES = {
+    "PL": "England Premier League",
+    "ELC": "England Championship",
+    "FL1": "France Ligue 1",
+    "BL1": "Germany Bundesliga",
+    "PPL": "Portugal Liga Portugal",
+    "DSU": "Denmark Superliga",
+    "SA": "Italy Serie A",
+    "PD": "Spain LaLiga",
+    "ABL": "Austria Bundesliga",
+}
 
-def api_get(endpoint, params):
-    """Call API-Football and return response data."""
+
+# ============================================================
+# API
+# ============================================================
+
+def api_get(endpoint, params=None):
     url = BASE_URL + endpoint
 
     response = requests.get(
         url,
         headers=HEADERS,
-        params=params,
+        params=params or {},
         timeout=30
     )
 
+    if response.status_code == 403:
+        raise RuntimeError(
+            "football-data.org returned 403 Forbidden. "
+            "This competition may not be available on the current API plan."
+        )
+
+    if response.status_code == 429:
+        raise RuntimeError(
+            "football-data.org rate limit reached."
+        )
+
     response.raise_for_status()
 
-    data = response.json()
-
-    if "errors" in data and data["errors"]:
-        raise RuntimeError(str(data["errors"]))
-
-    return data.get("response", [])
+    return response.json()
 
 
-def fixture_date(fixture):
-    return fixture["fixture"]["date"]
+# ============================================================
+# MATCH HELPERS
+# ============================================================
+
+def fixture_date(match):
+    return match.get("utcDate", "")
 
 
-def teams(fixture):
+def teams(match):
+    home = match.get("homeTeam", {})
+    away = match.get("awayTeam", {})
+
     return (
-        fixture["teams"]["home"]["id"],
-        fixture["teams"]["away"]["id"]
+        home.get("id"),
+        away.get("id"),
+        home.get("name", "Unknown"),
+        away.get("name", "Unknown")
     )
 
 
-def score(fixture):
-    goals = fixture.get("goals", {})
+def score(match):
+    full_time = match.get("score", {}).get("fullTime", {})
+
     return (
-        goals.get("home"),
-        goals.get("away")
+        full_time.get("home"),
+        full_time.get("away")
     )
 
 
-def result_type(fixture):
-    """Return result from the fixed Home/Away perspective."""
+def is_finished(match):
+    return match.get("status") in {
+        "FINISHED",
+        "AWARDED"
+    }
 
-    home_goals, away_goals = score(fixture)
+
+def result_type(match):
+    home_goals, away_goals = score(match)
 
     if home_goals is None or away_goals is None:
         return None
 
     if home_goals == away_goals:
-        if home_goals > 0:
-            return "draw_goals"
-        return "draw"
+        if home_goals == 0:
+            return "draw"
+        return "draw_goals"
 
     if home_goals > away_goals:
         return "a_win"
@@ -93,327 +121,458 @@ def result_type(fixture):
     return "b_win"
 
 
-def is_finished(fixture):
-    status = fixture["fixture"]["status"]["short"]
-    return status in {
-        "FT",
-        "AET",
-        "PEN"
-    }
-
-
-def sort_newest(fixtures):
+def sort_newest(matches):
     return sorted(
-        fixtures,
-        key=fixture_date,
+        matches,
+        key=lambda x: fixture_date(x),
         reverse=True
     )
 
 
-def pattern1(results):
-    """
-    Pattern 1:
+# ============================================================
+# PATTERN 1
+# ============================================================
 
-    A win followed by draw with goals
-    OR
-    draw with goals followed by B win
+PATTERN_1_A = [
+    "a_win",
+    "draw_goals"
+]
 
-    Returns:
-        target = "home" / "away"
-        or None
-    """
+PATTERN_1_B = [
+    "draw_goals",
+    "b_win"
+]
 
-    if len(results) < 2:
+
+def pattern1_h2h(matches):
+    finished = [
+        m for m in matches
+        if is_finished(m)
+    ]
+
+    finished = sort_newest(finished)
+
+    results = []
+
+    for match in finished[:10]:
+        result = result_type(match)
+
+        if result:
+            results.append(result)
+
+    if results[:2] == PATTERN_1_A:
+        return True, "home"
+
+    if results[:2] == PATTERN_1_B:
+        return True, "away"
+
+    return False, None
+
+
+# ============================================================
+# PATTERN 2
+# ============================================================
+
+PATTERN_2 = [
+    "draw_goals",
+    "draw_goals",
+    "a_win",
+    "b_win"
+]
+
+
+def pattern2_h2h(matches):
+    finished = [
+        m for m in matches
+        if is_finished(m)
+    ]
+
+    finished = sort_newest(finished)
+
+    results = []
+
+    for match in finished[:10]:
+        result = result_type(match)
+
+        if result:
+            results.append(result)
+
+    return results[:4] == PATTERN_2
+
+
+# ============================================================
+# PATTERN 3
+# ============================================================
+
+PATTERN_3 = [
+    "a_win",
+    "a_win",
+    "draw",
+    "b_win",
+    "b_win"
+]
+
+
+def pattern3_h2h(matches):
+    finished = [
+        m for m in matches
+        if is_finished(m)
+    ]
+
+    finished = sort_newest(finished)
+
+    results = []
+
+    for match in finished[:10]:
+        result = result_type(match)
+
+        if result:
+            results.append(result)
+
+    return results[:5] == PATTERN_3
+
+
+# ============================================================
+# TEAM-SPECIFIC PATTERN 1
+# ============================================================
+
+def team_result(match, team_id):
+    home_id, away_id, _, _ = teams(match)
+    home_goals, away_goals = score(match)
+
+    if home_goals is None or away_goals is None:
         return None
 
-    first = results[0]
-    second = results[1]
+    if team_id == home_id:
+        team_goals = home_goals
+        opponent_goals = away_goals
+    elif team_id == away_id:
+        team_goals = away_goals
+        opponent_goals = home_goals
+    else:
+        return None
 
-    if first == "a_win" and second == "draw_goals":
-        return "home"
+    if team_goals > opponent_goals:
+        return "win"
 
-    if first == "draw_goals" and second == "b_win":
-        return "away"
+    if team_goals == opponent_goals:
+        if team_goals == 0:
+            return "draw"
+        return "draw_goals"
+
+    return "loss"
+
+
+def team_pattern1(
+    matches,
+    team_id,
+    upcoming_opponent_id,
+    before_date
+):
+    cutoff = datetime.fromisoformat(
+        before_date.replace("Z", "+00:00")
+    )
+
+    recent = []
+
+    for match in matches:
+
+        if not is_finished(match):
+            continue
+
+        match_date = fixture_date(match)
+
+        if not match_date:
+            continue
+
+        match_dt = datetime.fromisoformat(
+            match_date.replace("Z", "+00:00")
+        )
+
+        if match_dt >= cutoff:
+            continue
+
+        home_id, away_id, _, _ = teams(match)
+
+        if team_id not in {home_id, away_id}:
+            continue
+
+        opponent_id = (
+            away_id
+            if team_id == home_id
+            else home_id
+        )
+
+        # Same condition as the original scanner:
+        # exclude matches against the upcoming opponent.
+        if opponent_id == upcoming_opponent_id:
+            continue
+
+        recent.append(match)
+
+    recent = sort_newest(recent)[:2]
+
+    results = []
+
+    for match in recent:
+        result = team_result(match, team_id)
+
+        if result:
+            results.append(result)
+
+    if results == ["win", "draw_goals"]:
+        return True
+
+    if results == ["draw_goals", "win"]:
+        return True
+
+    return False
+
+
+# ============================================================
+# H2H
+# ============================================================
+
+def get_h2h(
+    all_matches,
+    home_id,
+    away_id,
+    before_date
+):
+    cutoff = datetime.fromisoformat(
+        before_date.replace("Z", "+00:00")
+    )
+
+    h2h = []
+
+    for match in all_matches:
+
+        if not is_finished(match):
+            continue
+
+        match_date = fixture_date(match)
+
+        if not match_date:
+            continue
+
+        match_dt = datetime.fromisoformat(
+            match_date.replace("Z", "+00:00")
+        )
+
+        if match_dt >= cutoff:
+            continue
+
+        match_home_id, match_away_id, _, _ = teams(match)
+
+        if {
+            match_home_id,
+            match_away_id
+        } == {
+            home_id,
+            away_id
+        }:
+            h2h.append(match)
+
+    return sort_newest(h2h)[:10]
+
+
+# ============================================================
+# RECENT TEAM MATCHES
+# ============================================================
+
+def get_recent_team_games(
+    all_matches,
+    team_id,
+    upcoming_opponent_id,
+    before_date
+):
+    cutoff = datetime.fromisoformat(
+        before_date.replace("Z", "+00:00")
+    )
+
+    sixty_days_ago = cutoff - timedelta(days=60)
+
+    recent = []
+
+    for match in all_matches:
+
+        if not is_finished(match):
+            continue
+
+        match_date = fixture_date(match)
+
+        if not match_date:
+            continue
+
+        match_dt = datetime.fromisoformat(
+            match_date.replace("Z", "+00:00")
+        )
+
+        if match_dt >= cutoff:
+            continue
+
+        if match_dt < sixty_days_ago:
+            continue
+
+        home_id, away_id, _, _ = teams(match)
+
+        if team_id not in {home_id, away_id}:
+            continue
+
+        opponent_id = (
+            away_id
+            if team_id == home_id
+            else home_id
+        )
+
+        if opponent_id == upcoming_opponent_id:
+            continue
+
+        recent.append(match)
+
+    return sort_newest(recent)
+
+
+# ============================================================
+# EVALUATE MATCH
+# ============================================================
+
+def evaluate_match(
+    match,
+    league_code,
+    league_name,
+    all_matches
+):
+    (
+        home_id,
+        away_id,
+        home_name,
+        away_name
+    ) = teams(match)
+
+    match_date = fixture_date(match)
+
+    if not home_id or not away_id:
+        return None
+
+    h2h = get_h2h(
+        all_matches,
+        home_id,
+        away_id,
+        match_date
+    )
+
+    if len(h2h) < 2:
+        return None
+
+    h2h_sequence = [
+        result_type(m)
+        for m in h2h
+        if result_type(m)
+    ]
+
+    # --------------------------------------------------------
+    # PATTERN 1
+    # --------------------------------------------------------
+
+    pattern1_match, target = pattern1_h2h(h2h)
+
+    if pattern1_match:
+
+        target_team = (
+            home_name
+            if target == "home"
+            else away_name
+        )
+
+        result = {
+            "league": league_name,
+            "league_code": league_code,
+            "date": match_date,
+            "home": home_name,
+            "away": away_name,
+            "market": "Over 0.5 team goals",
+            "target_team": target_team,
+            "pattern": "Pattern 1",
+            "h2h_sequence": h2h_sequence
+        }
+
+        # ----------------------------------------------------
+        # PATTERN 4
+        # ----------------------------------------------------
+
+        home_recent = get_recent_team_games(
+            all_matches,
+            home_id,
+            away_id,
+            match_date
+        )
+
+        away_recent = get_recent_team_games(
+            all_matches,
+            away_id,
+            home_id,
+            match_date
+        )
+
+        home_pattern4 = team_pattern1(
+            home_recent,
+            home_id,
+            away_id,
+            match_date
+        )
+
+        away_pattern4 = team_pattern1(
+            away_recent,
+            away_id,
+            home_id,
+            match_date
+        )
+
+        if home_pattern4 and away_pattern4:
+            result["pattern"] = "Pattern 4"
+            result["market"] = "Pattern 4"
+
+        return result
+
+    # --------------------------------------------------------
+    # PATTERN 2
+    # --------------------------------------------------------
+
+    if pattern2_h2h(h2h):
+        return {
+            "league": league_name,
+            "league_code": league_code,
+            "date": match_date,
+            "home": home_name,
+            "away": away_name,
+            "market": "Over 1.5 goals",
+            "pattern": "Pattern 2",
+            "h2h_sequence": h2h_sequence
+        }
+
+    # --------------------------------------------------------
+    # PATTERN 3
+    # --------------------------------------------------------
+
+    if pattern3_h2h(h2h):
+        return {
+            "league": league_name,
+            "league_code": league_code,
+            "date": match_date,
+            "home": home_name,
+            "away": away_name,
+            "market": "Over 1.5 goals",
+            "pattern": "Pattern 3",
+            "h2h_sequence": h2h_sequence
+        }
 
     return None
 
 
-def pattern2(results):
-    """
-    Pattern 2:
-    draw+goals
-    draw+goals
-    home win
-    away win
-    """
-
-    wanted = [
-        "draw_goals",
-        "draw_goals",
-        "a_win",
-        "b_win"
-    ]
-
-    return len(results) >= 4 and results[:4] == wanted
-
-
-def pattern3(results):
-    """
-    Pattern 3:
-    home win
-    home win
-    draw
-    away win
-    away win
-    """
-
-    wanted = [
-        "a_win",
-        "a_win",
-        "draw",
-        "b_win",
-        "b_win"
-    ]
-
-    return len(results) >= 5 and results[:5] == wanted
-
-
-def get_h2h(home_id, away_id, league_id):
-    """
-    League-filtered H2H.
-    This prevents cup/friendly meetings from entering the patterns.
-    """
-
-    return api_get(
-        "/fixtures/headtohead",
-        {
-            "h2h": f"{home_id}-{away_id}",
-            "league": league_id,
-            "season": SEASON,
-            "last": 10
-        }
-    )
-
-
-def get_recent_team_games(team_id, league_id, before_date):
-    """
-    Get recent completed league games for a team,
-    excluding the upcoming opponent later in the process.
-    """
-
-    games = api_get(
-        "/fixtures",
-        {
-            "league": league_id,
-            "season": SEASON,
-            "team": team_id,
-            "from": (
-                datetime.fromisoformat(
-                    before_date.replace("Z", "+00:00")
-                ) - timedelta(days=60)
-            ).date().isoformat(),
-            "to": (
-                datetime.fromisoformat(
-                    before_date.replace("Z", "+00:00")
-                ) - timedelta(days=1)
-            ).date().isoformat(),
-            "status": "FT-AET-PEN"
-        }
-    )
-
-    return sort_newest(
-        [g for g in games if is_finished(g)]
-    )
-
-
-def team_pattern1(team_id, opponent_id, games):
-    """
-    Evaluate the latest two NON-H2H league games
-    from the selected team's perspective.
-    """
-
-    filtered = []
-
-    for game in games:
-        home_id, away_id = teams(game)
-
-        # Exclude games against the upcoming opponent.
-        if opponent_id in (home_id, away_id):
-            continue
-
-        if team_id not in (home_id, away_id):
-            continue
-
-        home_goals, away_goals = score(game)
-
-        if home_goals is None or away_goals is None:
-            continue
-
-        if home_id == team_id:
-            if home_goals > away_goals:
-                r = "win"
-            elif home_goals == away_goals and home_goals > 0:
-                r = "draw_goals"
-            else:
-                r = "other"
-        else:
-            if away_goals > home_goals:
-                r = "win"
-            elif away_goals == home_goals and away_goals > 0:
-                r = "draw_goals"
-            else:
-                r = "other"
-
-        filtered.append(r)
-
-        if len(filtered) == 2:
-            break
-
-    if len(filtered) < 2:
-        return False
-
-    return (
-        filtered == ["win", "draw_goals"]
-        or
-        filtered == ["draw_goals", "win"]
-    )
-
-
-def evaluate_match(fixture, league_id, league_name):
-    home_id, away_id = teams(fixture)
-
-    home_name = fixture["teams"]["home"]["name"]
-    away_name = fixture["teams"]["away"]["name"]
-
-    h2h = get_h2h(
-        home_id,
-        away_id,
-        league_id
-    )
-
-    h2h = [
-        g for g in h2h
-        if is_finished(g)
-    ]
-
-    h2h = sort_newest(h2h)
-
-    h2h_results = [
-        result_type(g)
-        for g in h2h
-    ]
-
-    h2h_results = [
-        r for r in h2h_results
-        if r is not None
-    ]
-
-    matches = []
-
-    # -------------------------
-    # PATTERN 1
-    # -------------------------
-
-    p1_target = pattern1(h2h_results)
-
-    if p1_target:
-        target_team = (
-            home_name
-            if p1_target == "home"
-            else away_name
-        )
-
-        matches.append({
-            "pattern": 1,
-            "market": "Over 0.5 team goals",
-            "target_team": target_team,
-            "reason": h2h_results[:2]
-        })
-
-    # -------------------------
-    # PATTERN 2
-    # -------------------------
-
-    if pattern2(h2h_results):
-        matches.append({
-            "pattern": 2,
-            "market": "Over 1.5 goals",
-            "target_team": None,
-            "reason": h2h_results[:4]
-        })
-
-    # -------------------------
-    # PATTERN 3
-    # -------------------------
-
-    if pattern3(h2h_results):
-        matches.append({
-            "pattern": 3,
-            "market": "Over 1.5 goals",
-            "target_team": None,
-            "reason": h2h_results[:5]
-        })
-
-    # -------------------------
-    # PATTERN 4
-    # -------------------------
-
-    if p1_target:
-
-        home_games = get_recent_team_games(
-            home_id,
-            league_id,
-            fixture_date(fixture)
-        )
-
-        away_games = get_recent_team_games(
-            away_id,
-            league_id,
-            fixture_date(fixture)
-        )
-
-        home_ok = team_pattern1(
-            home_id,
-            away_id,
-            home_games
-        )
-
-        away_ok = team_pattern1(
-            away_id,
-            home_id,
-            away_games
-        )
-
-        if home_ok and away_ok:
-            matches.append({
-                "pattern": 4,
-                "market": "Pattern 4",
-                "target_team": (
-                    home_name
-                    if p1_target == "home"
-                    else away_name
-                ),
-                "reason": {
-                    "h2h": h2h_results[:2],
-                    "home_team": home_name,
-                    "away_team": away_name
-                }
-            })
-
-    if not matches:
-        return None
-
-    return {
-        "fixture_id": fixture["fixture"]["id"],
-        "date": fixture_date(fixture),
-        "league_id": league_id,
-        "league": league_name,
-        "home": home_name,
-        "away": away_name,
-        "matches": matches,
-        "h2h_sequence": h2h_results[:10]
-    }
-
+# ============================================================
+# FILE HELPERS
+# ============================================================
 
 def load_json(path, default):
     if not os.path.exists(path):
@@ -427,6 +586,8 @@ def load_json(path, default):
 
 
 def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
             data,
@@ -436,153 +597,252 @@ def save_json(path, data):
         )
 
 
-def main():
+# ============================================================
+# MAIN
+# ============================================================
 
-    os.makedirs(DATA_DIR, exist_ok=True)
+def main():
 
     now = datetime.now(timezone.utc)
 
     today = now.date()
 
-    # Scan today through the next 7 days.
     end_date = today + timedelta(days=7)
 
-    all_qualifiers = []
+    date_from = today - timedelta(days=365)
 
-    scanned_leagues = []
+    date_to = end_date
 
-    for league_id, league_name in LEAGUES.items():
+    all_results = []
 
-        print(
-            f"Scanning {league_name}..."
-        )
+    league_status = []
+
+    print("========================================")
+    print("FOOTBALL PATTERN SCANNER")
+    print("========================================")
+    print("Season:", SEASON)
+    print("Scanning:", today, "through", end_date)
+    print("========================================")
+
+    for league_code, league_name in LEAGUES.items():
+
+        print()
+        print("----------------------------------------")
+        print("League:", league_name)
+        print("Code:", league_code)
+        print("----------------------------------------")
 
         try:
 
-            fixtures = api_get(
-                "/fixtures",
+            data = api_get(
+                f"/competitions/{league_code}/matches",
                 {
-                    "league": league_id,
                     "season": SEASON,
-                    "from": today.isoformat(),
-                    "to": end_date.isoformat()
+                    "dateFrom": date_from.isoformat(),
+                    "dateTo": date_to.isoformat()
                 }
             )
 
-            upcoming = []
+            matches = data.get("matches", [])
 
-            for fixture in fixtures:
+            print("Matches returned:", len(matches))
 
-                status = fixture["fixture"]["status"]["short"]
-
-                if status in {
-                    "NS",
-                    "TBD",
-                    "PST"
-                }:
-                    upcoming.append(fixture)
-
-            scanned_leagues.append({
-                "id": league_id,
-                "name": league_name,
-                "fixtures_checked": len(upcoming)
+            league_status.append({
+                "league": league_name,
+                "code": league_code,
+                "status": "OK",
+                "matches": len(matches)
             })
 
-            for fixture in upcoming:
+            # Upcoming matches only
+            upcoming = []
+
+            for match in matches:
+
+                status = match.get("status")
+
+                if status not in {
+                    "SCHEDULED",
+                    "TIMED"
+                }:
+                    continue
+
+                match_date = fixture_date(match)
+
+                if not match_date:
+                    continue
+
+                match_dt = datetime.fromisoformat(
+                    match_date.replace("Z", "+00:00")
+                )
+
+                if match_dt < now:
+                    continue
+
+                if match_dt.date() > end_date:
+                    continue
+
+                upcoming.append(match)
+
+            upcoming = sorted(
+                upcoming,
+                key=lambda x: fixture_date(x)
+            )
+
+            print("Upcoming matches:", len(upcoming))
+
+            for match in upcoming:
+
+                home_id, away_id, home_name, away_name = teams(match)
+
+                print(
+                    "Checking:",
+                    home_name,
+                    "vs",
+                    away_name
+                )
 
                 try:
 
                     result = evaluate_match(
-                        fixture,
-                        league_id,
-                        league_name
+                        match,
+                        league_code,
+                        league_name,
+                        matches
                     )
 
                     if result:
-                        all_qualifiers.append(result)
 
-                except Exception as e:
+                        print(
+                            "  MATCHED:",
+                            result["pattern"],
+                            "|",
+                            result["market"]
+                        )
+
+                        all_results.append(result)
+
+                    else:
+                        print("  No pattern")
+
+                except Exception as match_error:
 
                     print(
-                        f"Could not evaluate "
-                        f"{fixture['fixture']['id']}: {e}"
+                        "  Match error:",
+                        str(match_error)
                     )
 
-                # Stay safely below API rate limits.
-                time.sleep(0.25)
+                # Small pause between processing
+                time.sleep(0.2)
 
-        except Exception as e:
+        except Exception as league_error:
 
             print(
-                f"League failed: "
-                f"{league_name}: {e}"
+                "SKIPPED:",
+                league_name,
+                "|",
+                str(league_error)
             )
 
-    generated_at = datetime.now(
-        timezone.utc
-    ).isoformat()
+            league_status.append({
+                "league": league_name,
+                "code": league_code,
+                "status": "ERROR",
+                "error": str(league_error)
+            })
 
-    live = {
-        "generated_at": generated_at,
+        # Pause between league requests
+        time.sleep(1)
+
+    # ========================================================
+    # OUTPUT
+    # ========================================================
+
+    all_results = sorted(
+        all_results,
+        key=lambda x: x.get("date", "")
+    )
+
+    output = {
+        "updated_at": now.isoformat(),
         "season": SEASON,
-        "leagues": scanned_leagues,
-        "qualifiers": all_qualifiers
+        "date_from": str(today),
+        "date_to": str(end_date),
+        "matches": all_results,
+        "league_status": league_status
     }
 
     save_json(
         LIVE_FILE,
-        live
+        output
     )
 
-    # Keep historical scanner runs.
+    # ========================================================
+    # HISTORY
+    # ========================================================
+
     history = load_json(
         HISTORY_FILE,
         []
     )
 
-    history.append({
-        "generated_at": generated_at,
-        "qualifiers": all_qualifiers
-    })
+    if not isinstance(history, list):
+        history = []
 
-    # Keep approximately the last 14 days.
-    cutoff = now - timedelta(days=14)
+    history.append(output)
+
+    cutoff_history = now - timedelta(days=14)
 
     cleaned_history = []
 
     for item in history:
 
+        timestamp = item.get("updated_at")
+
+        if not timestamp:
+            continue
+
         try:
-            item_date = datetime.fromisoformat(
-                item["generated_at"].replace(
-                    "Z",
-                    "+00:00"
-                )
+            item_dt = datetime.fromisoformat(
+                timestamp.replace("Z", "+00:00")
             )
 
-            if item_date >= cutoff:
+            if item_dt >= cutoff_history:
                 cleaned_history.append(item)
 
         except Exception:
-            pass
+            continue
 
     save_json(
         HISTORY_FILE,
         cleaned_history
     )
 
-    print("")
-    print("================================")
-    print("PATTERN SCANNER COMPLETE")
-    print("================================")
-    print(
-        f"Qualifying fixtures: "
-        f"{len(all_qualifiers)}"
-    )
-    print(
-        f"History records: "
-        f"{len(cleaned_history)}"
-    )
+    # ========================================================
+    # SUMMARY
+    # ========================================================
+
+    print()
+    print("========================================")
+    print("SCAN COMPLETE")
+    print("========================================")
+    print("Pattern matches:", len(all_results))
+
+    for result in all_results:
+
+        print(
+            result["league"],
+            "|",
+            result["home"],
+            "vs",
+            result["away"],
+            "|",
+            result["pattern"],
+            "|",
+            result["market"]
+        )
+
+    print("========================================")
 
 
 if __name__ == "__main__":

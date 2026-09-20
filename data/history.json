@@ -313,5 +313,68 @@
         "error": "football-data.org returned 403 Forbidden. This competition may not be available on the current API plan."
       }
     ]
+  },
+  {
+    "updated_at": "2026-09-20T08:39:44.702418+00:00",
+    "season": 2026,
+    "date_from": "2026-09-20",
+    "date_to": "2026-09-27",
+    "matches": [],
+    "league_status": [
+      {
+        "league": "England Premier League",
+        "code": "PL",
+        "status": "OK",
+        "matches": 390
+      },
+      {
+        "league": "England Championship",
+        "code": "ELC",
+        "status": "OK",
+        "matches": 591
+      },
+      {
+        "league": "France Ligue 1",
+        "code": "FL1",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      },
+      {
+        "league": "Germany Bundesliga",
+        "code": "BL1",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      },
+      {
+        "league": "Portugal Liga Portugal",
+        "code": "PPL",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      },
+      {
+        "league": "Denmark Superliga",
+        "code": "DSU",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      },
+      {
+        "league": "Italy Serie A",
+        "code": "SA",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      },
+      {
+        "league": "Spain LaLiga",
+        "code": "PD",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      },
+      {
+        "league": "Austria Bundesliga",
+        "code": "ABL",
+        "status": "ERROR",
+        "error": "football-data.org rate limit reached."
+      }
+    ]
   }
 ]

@@ -1,0 +1,19 @@
+name: Test API Football
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Test API-Football connection
+        env:
+          API_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: |
+          response=$(curl -s \
+            -H "x-apisports-key: $API_KEY" \
+            "https://v3.football.api-sports.io/status")
+
+          echo "$response"

@@ -470,7 +470,10 @@ def evaluate_match(
         for m in h2h
         if result_type(m)
     ]
-
+    print(
+        "  H2H sequence:",
+        " -> ".join(h2h_sequence) if h2h_sequence else "NO DATA"
+    )
     # --------------------------------------------------------
     # PATTERN 1
     # --------------------------------------------------------

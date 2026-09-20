@@ -1,26 +1,65 @@
 [
   {
-    "generated_at": "2026-09-20T04:18:52.254896+00:00",
-    "qualifiers": []
-  },
-  {
-    "generated_at": "2026-09-20T04:46:46.394330+00:00",
-    "qualifiers": []
-  },
-  {
-    "generated_at": "2026-09-20T05:01:50.977582+00:00",
-    "qualifiers": []
-  },
-  {
-    "generated_at": "2026-09-20T05:17:45.698561+00:00",
-    "qualifiers": []
-  },
-  {
-    "generated_at": "2026-09-20T05:18:16.432550+00:00",
-    "qualifiers": []
-  },
-  {
-    "generated_at": "2026-09-20T06:23:26.348504+00:00",
-    "qualifiers": []
+    "updated_at": "2026-09-20T07:13:54.630997+00:00",
+    "season": 2026,
+    "date_from": "2026-09-20",
+    "date_to": "2026-09-27",
+    "matches": [],
+    "league_status": [
+      {
+        "league": "England Premier League",
+        "code": "PL",
+        "status": "OK",
+        "matches": 390
+      },
+      {
+        "league": "England Championship",
+        "code": "ELC",
+        "status": "OK",
+        "matches": 591
+      },
+      {
+        "league": "France Ligue 1",
+        "code": "FL1",
+        "status": "OK",
+        "matches": 314
+      },
+      {
+        "league": "Germany Bundesliga",
+        "code": "BL1",
+        "status": "OK",
+        "matches": 314
+      },
+      {
+        "league": "Portugal Liga Portugal",
+        "code": "PPL",
+        "status": "OK",
+        "matches": 324
+      },
+      {
+        "league": "Denmark Superliga",
+        "code": "DSU",
+        "status": "ERROR",
+        "error": "football-data.org returned 403 Forbidden. This competition may not be available on the current API plan."
+      },
+      {
+        "league": "Italy Serie A",
+        "code": "SA",
+        "status": "OK",
+        "matches": 399
+      },
+      {
+        "league": "Spain LaLiga",
+        "code": "PD",
+        "status": "OK",
+        "matches": 407
+      },
+      {
+        "league": "Austria Bundesliga",
+        "code": "ABL",
+        "status": "ERROR",
+        "error": "football-data.org returned 403 Forbidden. This competition may not be available on the current API plan."
+      }
+    ]
   }
 ]

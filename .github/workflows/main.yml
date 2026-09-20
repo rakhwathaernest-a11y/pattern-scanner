@@ -23,28 +23,28 @@ jobs:
       - name: Install dependencies
         run: pip install requests
       - name: Test football-data.org
-       env:
-    FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
-  run: |
-    python - <<'PY'
-    import os
-    import requests
+        env:
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          import requests
 
-    url = "https://api.football-data.org/v4/competitions/PL/matches"
-    headers = {"X-Auth-Token": os.environ["FOOTBALL_DATA_TOKEN"]}
-    params = {"season": "2026"}
+          url = "https://api.football-data.org/v4/competitions/PL/matches"
+          headers = {"X-Auth-Token": os.environ["FOOTBALL_DATA_TOKEN"]}
+          params = {"season": "2026"}
 
-    r = requests.get(url, headers=headers, params=params, timeout=30)
+          r = requests.get(url, headers=headers, params=params, timeout=30)
 
-    print("HTTP STATUS:", r.status_code)
-    print(r.text[:2000])
+          print("HTTP STATUS:", r.status_code)
+          print(r.text[:2000])
 
-    r.raise_for_status()
+          r.raise_for_status()
 
-    data = r.json()
-    print("MATCHES FOUND:", len(data.get("matches", [])))
-    print("SEASON:", data.get("season"))
-    PY     
+          data = r.json()
+          print("MATCHES FOUND:", len(data.get("matches", [])))
+          print("SEASON:", data.get("season"))
+          PY
       - name: Run scanner
         env:
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}

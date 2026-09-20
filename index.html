@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pattern Scanner</title>
+<style>
+body{margin:0;background:#06131d;color:#fff;font-family:-apple-system,BlinkMacSystemFont,Arial}
+.app{max-width:520px;margin:auto;padding:20px 16px 80px}
+h1{font-size:28px}.sub{color:#8da2b1}
+.card{background:#0b2231;border:1px solid #17384a;border-radius:16px;padding:16px;margin:12px 0}
+button{width:100%;padding:15px;border:0;border-radius:14px;background:#19e68c;color:#032016;font-weight:bold;font-size:16px}
+.pill{color:#19e68c;background:#093d2b;border:1px solid #087c56;padding:5px 9px;border-radius:8px;font-size:12px}
+.muted{color:#8da2b1}.green{color:#19e68c}
+nav{position:fixed;bottom:0;left:0;right:0;background:#031019;border-top:1px solid #17384a;padding:16px;text-align:center}
+nav span{margin:0 9px;color:#8da2b1;cursor:pointer}
+section{display:none}section.active{display:block}
+</style>
+</head>
+<body>
+<div class="app">
+
+<h1>⚽ Pattern Scanner</h1>
+<div class="sub">Football H2H Pattern Finder</div>
+
+<section id="home" class="active">
+<div class="card">
+<h2>Your Pattern Scanner</h2>
+<p class="muted">Find football matches that satisfy your four H2H patterns.</p>
+<button onclick="show('fixtures')">Find Qualifying Matches</button>
+</div>
+
+<div class="card">
+<b>4</b>
+<p class="muted">Active patterns</p>
+</div>
+
+<div class="card">
+<span class="pill">PATTERN 1</span>
+<h3>TS Galaxy vs Chippa United</h3>
+<p class="green">TS Galaxy over 0.5 goal</p>
+</div>
+
+<div class="card">
+<span class="pill">PATTERN 1</span>
+<h3>Valencia vs Real Sociedad</h3>
+<p class="green">Valencia over 0.5 goal</p>
+</div>
+</section>
+
+<section id="fixtures">
+<h2>Qualifying Matches</h2>
+
+<div class="card">
+<span class="pill">P1</span>
+<h3>🇿🇦 TS Galaxy vs Chippa United</h3>
+<p class="green">TS Galaxy over 0.5 goal</p>
+<p class="muted">Draw + Goals → TS Galaxy Win</p>
+</div>
+
+<div class="card">
+<span class="pill">P1</span>
+<h3>🇪🇸 Valencia vs Real Sociedad</h3>
+<p class="green">Valencia over 0.5 goal</p>
+<p class="muted">Valencia Win → Draw + Goals</p>
+</div>
+
+<p class="muted">Demo data only. Live football data will be connected next.</p>
+</section>
+
+<section id="patterns">
+<h2>My Patterns</h2>
+
+<div class="card">
+<span class="pill">PATTERN 1</span>
+<p>Win → Draw + Goals</p>
+<p>Draw + Goals → Win</p>
+<p class="green">Selection: winning team over 0.5 goal</p>
+</div>
+
+<div class="card">
+<span class="pill">PATTERN 2</span>
+<p>Draw + Goals</p>
+<p>Draw + Goals</p>
+<p>Home Win</p>
+<p>Away Win</p>
+<p class="green">Selection: Over 1.5 goals</p>
+</div>
+
+<div class="card">
+<span class="pill">PATTERN 3</span>
+<p>Home Win → Home Win → Draw → Away Win → Away Win</p>
+<p class="green">Selection: Over 1.5 goals</p>
+</div>
+
+<div class="card">
+<span class="pill">PATTERN 4</span>
+<p>Both teams' latest 2 games satisfy Pattern 1 AND the latest 2 H2Hs satisfy Pattern 1.</p>
+<p class="green">Selection: Over 1.5 goals</p>
+</div>
+</section>
+
+<section id="history">
+<h2>History</h2>
+<div class="card">
+<p>No completed demo results yet.</p>
+<p class="muted">Future scans and results will appear here.</p>
+</div>
+</section>
+
+<section id="settings">
+<h2>Settings</h2>
+<div class="card">
+<h3>Selected leagues</h3>
+<p class="muted">
+Austria Bundesliga<br>
+Denmark Superliga<br>
+England Premier League<br>
+England Championship<br>
+France Ligue 1<br>
+Germany Bundesliga<br>
+Italy Serie A<br>
+Portugal Liga Portugal<br>
+South Africa Betway Premiership<br>
+Spain LaLiga
+</p>
+</div>
+</section>
+
+</div>
+
+<nav>
+<span onclick="show('home')">Home</span>
+<span onclick="show('fixtures')">Fixtures</span>
+<span onclick="show('patterns')">Patterns</span>
+<span onclick="show('history')">History</span>
+<span onclick="show('settings')">Settings</span>
+</nav>
+
+<script>
+function show(id){
+document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+document.getElementById(id).classList.add('active');
+window.scrollTo(0,0);
+}
+</script>
+
+</body>
+</html>

@@ -246,9 +246,11 @@ def team_result(match, team_id):
     if team_id == home_id:
         team_goals = home_goals
         opponent_goals = away_goals
+
     elif team_id == away_id:
         team_goals = away_goals
         opponent_goals = home_goals
+
     else:
         return None
 
@@ -258,6 +260,7 @@ def team_result(match, team_id):
     if team_goals == opponent_goals:
         if team_goals == 0:
             return "draw"
+
         return "draw_goals"
 
     return "loss"
@@ -303,8 +306,8 @@ def team_pattern1(
             else home_id
         )
 
-        # Same condition as the original scanner:
-        # exclude matches against the upcoming opponent.
+        # Do not use the upcoming H2H as one of the
+        # team's individual recent games.
         if opponent_id == upcoming_opponent_id:
             continue
 
@@ -319,6 +322,16 @@ def team_pattern1(
 
         if result:
             results.append(result)
+
+    # Pattern 1 for an individual team:
+    #
+    # Latest game = WIN
+    # Second latest = DRAW WITH GOALS
+    #
+    # OR
+    #
+    # Latest game = DRAW WITH GOALS
+    # Second latest = WIN
 
     if results == ["win", "draw_goals"]:
         return True
@@ -377,63 +390,6 @@ def get_h2h(
 
 
 # ============================================================
-# RECENT TEAM MATCHES
-# ============================================================
-
-def get_recent_team_games(
-    all_matches,
-    team_id,
-    upcoming_opponent_id,
-    before_date
-):
-    cutoff = datetime.fromisoformat(
-        before_date.replace("Z", "+00:00")
-    )
-
-    sixty_days_ago = cutoff - timedelta(days=60)
-
-    recent = []
-
-    for match in all_matches:
-
-        if not is_finished(match):
-            continue
-
-        match_date = fixture_date(match)
-
-        if not match_date:
-            continue
-
-        match_dt = datetime.fromisoformat(
-            match_date.replace("Z", "+00:00")
-        )
-
-        if match_dt >= cutoff:
-            continue
-
-        if match_dt < sixty_days_ago:
-            continue
-
-        home_id, away_id, _, _ = teams(match)
-
-        if team_id not in {home_id, away_id}:
-            continue
-
-        opponent_id = (
-            away_id
-            if team_id == home_id
-            else home_id
-        )
-
-        if opponent_id == upcoming_opponent_id:
-            continue
-
-        recent.append(match)
-
-    return sort_newest(recent)
-
-
-# ============================================================
 # EVALUATE MATCH
 # ============================================================
 
@@ -455,6 +411,10 @@ def evaluate_match(
     if not home_id or not away_id:
         return None
 
+    # --------------------------------------------------------
+    # H2H
+    # --------------------------------------------------------
+
     h2h = get_h2h(
         all_matches,
         home_id,
@@ -470,12 +430,16 @@ def evaluate_match(
         for m in h2h
         if result_type(m)
     ]
+
     print(
         "  H2H sequence:",
-        " -> ".join(h2h_sequence) if h2h_sequence else "NO DATA"
+        " -> ".join(h2h_sequence)
+        if h2h_sequence
+        else "NO DATA"
     )
+
     # --------------------------------------------------------
-    # PATTERN 1
+    # PATTERN 1 H2H
     # --------------------------------------------------------
 
     pattern1_match, target = pattern1_h2h(h2h)
@@ -488,7 +452,64 @@ def evaluate_match(
             else away_name
         )
 
-        result = {
+        # ----------------------------------------------------
+        # PATTERN 4
+        #
+        # Pattern 4 requires ALL THREE:
+        #
+        # 1. H2H = Pattern 1
+        # 2. Team A recent games = Pattern 1
+        # 3. Team B recent games = Pattern 1
+        #
+        # If all three are true -> BETS
+        # ----------------------------------------------------
+
+        home_pattern1 = team_pattern1(
+            all_matches,
+            home_id,
+            away_id,
+            match_date
+        )
+
+        away_pattern1 = team_pattern1(
+            all_matches,
+            away_id,
+            home_id,
+            match_date
+        )
+
+        print(
+            "  Team A recent Pattern 1:",
+            "YES" if home_pattern1 else "NO"
+        )
+
+        print(
+            "  Team B recent Pattern 1:",
+            "YES" if away_pattern1 else "NO"
+        )
+
+        if home_pattern1 and away_pattern1:
+            print(
+                "  PATTERN 4: H2H + Team A + Team B = YES"
+            )
+
+            return {
+                "league": league_name,
+                "league_code": league_code,
+                "date": match_date,
+                "home": home_name,
+                "away": away_name,
+                "market": "BETS",
+                "target_team": target_team,
+                "pattern": "Pattern 4",
+                "h2h_sequence": h2h_sequence
+            }
+
+        # ----------------------------------------------------
+        # Normal Pattern 1
+        # ----------------------------------------------------
+
+        return {
             "league": league_name,
             "league_code": league_code,
             "date": match_date,
@@ -500,49 +521,12 @@ def evaluate_match(
             "h2h_sequence": h2h_sequence
         }
 
-        # ----------------------------------------------------
-        # PATTERN 4
-        # ----------------------------------------------------
-
-        home_recent = get_recent_team_games(
-            all_matches,
-            home_id,
-            away_id,
-            match_date
-        )
-
-        away_recent = get_recent_team_games(
-            all_matches,
-            away_id,
-            home_id,
-            match_date
-        )
-
-        home_pattern4 = team_pattern1(
-            home_recent,
-            home_id,
-            away_id,
-            match_date
-        )
-
-        away_pattern4 = team_pattern1(
-            away_recent,
-            away_id,
-            home_id,
-            match_date
-        )
-
-        if home_pattern4 and away_pattern4:
-            result["pattern"] = "Pattern 4"
-            result["market"] = "Pattern 4"
-
-        return result
-
     # --------------------------------------------------------
     # PATTERN 2
     # --------------------------------------------------------
 
     if pattern2_h2h(h2h):
+
         return {
             "league": league_name,
             "league_code": league_code,
@@ -559,6 +543,7 @@ def evaluate_match(
     # --------------------------------------------------------
 
     if pattern3_h2h(h2h):
+
         return {
             "league": league_name,
             "league_code": league_code,
@@ -584,12 +569,16 @@ def load_json(path, default):
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
+
     except Exception:
         return default
 
 
 def save_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(
+        os.path.dirname(path),
+        exist_ok=True
+    )
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(
@@ -648,7 +637,10 @@ def main():
 
             matches = data.get("matches", [])
 
-            print("Matches returned:", len(matches))
+            print(
+                "Matches returned:",
+                len(matches)
+            )
 
             league_status.append({
                 "league": league_name,
@@ -657,7 +649,10 @@ def main():
                 "matches": len(matches)
             })
 
-            # Upcoming matches only
+            # ------------------------------------------------
+            # UPCOMING MATCHES
+            # ------------------------------------------------
+
             upcoming = []
 
             for match in matches:
@@ -692,11 +687,19 @@ def main():
                 key=lambda x: fixture_date(x)
             )
 
-            print("Upcoming matches:", len(upcoming))
+            print(
+                "Upcoming matches:",
+                len(upcoming)
+            )
 
             for match in upcoming:
 
-                home_id, away_id, home_name, away_name = teams(match)
+                (
+                    home_id,
+                    away_id,
+                    home_name,
+                    away_name
+                ) = teams(match)
 
                 print(
                     "Checking:",
@@ -726,7 +729,10 @@ def main():
                         all_results.append(result)
 
                     else:
-                        print("  No pattern")
+
+                        print(
+                            "  No pattern"
+                        )
 
                 except Exception as match_error:
 
@@ -735,7 +741,6 @@ def main():
                         str(match_error)
                     )
 
-                # Small pause between processing
                 time.sleep(0.2)
 
         except Exception as league_error:
@@ -754,7 +759,6 @@ def main():
                 "error": str(league_error)
             })
 
-        # Pause between league requests
         time.sleep(1)
 
     # ========================================================
@@ -806,6 +810,7 @@ def main():
             continue
 
         try:
+
             item_dt = datetime.fromisoformat(
                 timestamp.replace("Z", "+00:00")
             )
@@ -829,7 +834,10 @@ def main():
     print("========================================")
     print("SCAN COMPLETE")
     print("========================================")
-    print("Pattern matches:", len(all_results))
+    print(
+        "Pattern matches:",
+        len(all_results)
+    )
 
     for result in all_results:
 

@@ -47,7 +47,7 @@ jobs:
           PY
       - name: Run scanner
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+  
           FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}        
         run: |
           python scripts/update_data.py
